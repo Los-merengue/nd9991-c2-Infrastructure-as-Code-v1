@@ -4,6 +4,47 @@ Parameters:
         Type: String
 Resources:
 
+  UdacityS3ReadOnlyEC2:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: 
+              - 's3:GetObject'
+
+  ProfileWithRolesForOurApp:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Roles:
+        - Ref: UdacityS3ReadOnlyEC2
+
+  WebServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our hosts and SSH from local only
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
   LBSecGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -20,7 +61,7 @@ Resources:
       - IpProtocol: tcp
         FromPort: 80
         ToPort: 80
-        CidrIp: !Ref VpcCIDR
+        CidrIp: 0.0.0.0/0
 
   WebAppGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -30,10 +71,12 @@ Resources:
           !Sub "${EnvironmentName}-PRIV-NETS"
       LaunchConfigurationName:
         Ref: WebAppLaunchConfig
-      MinSize: '3'
-      MaxSize: '5'
+      MinSize: '2'
+      MaxSize: '4'
       TargetGroupARNs:
       - Ref: WebAppTargetGroup
+
+
   WebAppLB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -43,6 +86,42 @@ Resources:
       SecurityGroups:
       - Ref: LBSecGroup
 
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebAppTargetGroup
+      LoadBalancerArn:
+        Ref: WebAppLB
+      Port: '80'
+      Protocol: HTTP
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref 'WebAppTargetGroup'
+      Conditions:
+      - Field: path-pattern
+        Values: [/]
+      ListenerArn: !Ref 'Listener'
+      Priority: 1
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: 
+        Fn::ImportValue:
+          Fn::Sub: "${EnvironmentName}-VPCID"
 
 
 
@@ -56,11 +135,8 @@ Resources:
           sudo apt-get install apache2 -y
           sudo systemctl start apache2.service
           cd /var/www/html
-          echo "Udacity Demo Web Server Up and Running!" > index.html          
-      # ToDo: AMI ID of Ubuntu Linux machine. Too get one, try creating a VM from the web console. 
-      ImageId: ami-0747bdcabd34c712a
-      # ToDo: Change the key-pair name, as applicable to you. 
-      KeyName: nd9990_keypair
+          echo "Udacity Demo Web Server Up and Running!" > index.html           
+      ImageId: ami-0892d3c7ee96c0bf7
       SecurityGroups:
       - Ref: WebServerSecGroup
       InstanceType: t3.medium
@@ -69,30 +145,11 @@ Resources:
         Ebs:
           VolumeSize: '10'
 
-  # instace profile contains the IAM Role name(s) that we want to associate to our auto scaling EC2 Servers
-  # never give too much permissions to your EC2 instances! if they get hacked, the permissions get hacked also!
-  # in this example, I create a Role called UdacityS3ReadOnlyC2 and just give it a policy of S3 Read-Only Access
-  ProfileWithRolesForOurApp:
-    Type: AWS::IAM::InstanceProfile
-    Properties: 
-      Roles:
-        - UdacityS3ReadOnlyEC2
-Outputs: 
-  # This is also optional.
-  # Bonus points for useful outputs!
-  # for example, if you create a Load Balancer
-  # it's nice to output the URL to it here, so that we don't have to go to the console to get it.
 
-# Sample UserData
-# When creating your Launch Configuration, you may need a UserData script
-# here's one that you can use for Ubuntu Linux that will:
-# Install Apache Web Server, Start it, and create an index.html that will be displayed
-# when you visit the IP address of this server with your web browser
-#Here it is:
-#
-#          #!/bin/bash
-#          apt-get update -y
-#          apt-get install apache2 -y
-#          systemctl start apache2.service
-#          cd /var/www/html
-#          echo "Udacity Demo Web Server Up and Running!" > index.html
+Outputs: 
+
+  LBDns:
+    Description: A reference to the DNS in the Load Balancer
+    Value: !Join [ "http://", !GetAtt WebAppLB.DNSName ]
+    Export:
+      Name: !Sub 'DNS_LB'
