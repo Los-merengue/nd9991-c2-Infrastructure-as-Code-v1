@@ -2,10 +2,22 @@ Parameters:
   EnvironmentName:
         Description: An environment name that will be prefixed to resource names
         Type: String
+
+  InstanceTypeParameter:
+        Description: This is the type of instance that is used for this project
+        Type: String
+        Default: t2.medium
+  
+  AMI-ID:
+        Description: This is the Image ID of the instance created
+        Type: String
+        Default: ami-0892d3c7ee96c0bf7
+
+
 Resources:
 
   UdacityS3ReadOnlyEC2:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -123,9 +135,7 @@ Resources:
         Fn::ImportValue:
           Fn::Sub: "${EnvironmentName}-VPCID"
 
-
-
-  WebAppLaunchConfig:
+  WebAppAutoScaleLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
       UserData:
@@ -135,11 +145,12 @@ Resources:
           sudo apt-get install apache2 -y
           sudo systemctl start apache2.service
           cd /var/www/html
-          echo "Udacity Demo Web Server Up and Running!" > index.html           
+          echo "It Works! Udagram, Udacity" > index.html           
+      IamInstanceProfile: !Ref ProfileWithRolesForOurApp
       ImageId: ami-0892d3c7ee96c0bf7
       SecurityGroups:
       - Ref: WebServerSecGroup
-      InstanceType: t3.medium
+      InstanceType: !Ref InstanceTypeParameter
       BlockDeviceMappings:
       - DeviceName: "/dev/sdk"
         Ebs:
@@ -147,9 +158,8 @@ Resources:
 
 
 Outputs: 
-
-  LBDns:
+  LoadBalancerDNS:
     Description: A reference to the DNS in the Load Balancer
-    Value: !Join [ "http://", !GetAtt WebAppLB.DNSName ]
+    Value: !Join ["", ["http://", !GetAtt WebAppLB.DNSName ] ] 
     Export:
-      Name: !Sub 'DNS_LB'
+      Name: !Sub ${EnvironmentName}-DNS-NAME
