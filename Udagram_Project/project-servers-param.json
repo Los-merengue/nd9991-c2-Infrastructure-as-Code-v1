@@ -8,7 +8,7 @@
 		"ParameterValue": "t2.medium"
 	},
 	{
-		"ParameterKey": "AMI-ID",
+		"ParameterKey": "AMI",
 		"ParameterValue": "ami-0892d3c7ee96c0bf7"
 	}
 ]
