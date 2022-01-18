@@ -143,9 +143,12 @@ Resources:
           #!/bin/bash
           sudo apt-get update -y
           sudo apt-get install apache2 -y
-          sudo systemctl start apache2.service
+          sudo apt-get install unzip awscli -y
           cd /var/www/html
-          echo "It Works! Udagram, Udacity" > index.html           
+          aws s3 cp s3://udagram-s3/udagram_App.zip .
+          unzip -o udagram_udacity.zip
+          sudo systemctl start apache2.service  
+                  
       IamInstanceProfile: !Ref ProfileWithRolesForOurApp
       ImageId: ami-0892d3c7ee96c0bf7
       SecurityGroups:
